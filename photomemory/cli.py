@@ -355,6 +355,14 @@ def faces_people():
     console.print(t)
 
 
+@app.command()
+def web(host: str = typer.Option("127.0.0.1", help="Bind address."),
+        port: int = typer.Option(8000, help="Port.")):
+    """Launch the local web UI (browse, preview/approve, render, watch)."""
+    from .web import serve
+    serve(host, port)
+
+
 def main():
     app()
 

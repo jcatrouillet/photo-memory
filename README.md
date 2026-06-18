@@ -73,6 +73,23 @@ python -m photomemory.cli build trip --around 2024-06-15
 
 Add `--no-music` to any `build` command for a silent video.
 
+## Web UI
+
+A local, no-build web app to browse, preview, approve, and render — and watch results:
+
+```powershell
+python -m photomemory.cli web            # -> http://127.0.0.1:8000
+```
+
+- **Browse** months / years / trips (with place & event highlights).
+- Click one to **preview** the auto-selection: a thumbnail grid with family-member badges
+  and quality scores. Click any photo to include/exclude it, set the length, then **Render**.
+- **Videos** tab plays and downloads finished memories; **People** tab shows enrolled
+  people and the face-review montages.
+
+Long operations (scoring a selection, rendering) run as background jobs the page polls.
+Backend is FastAPI (`photomemory/web.py`); the single-page frontend is `photomemory/static/index.html`.
+
 ## Face recognition (enrolling family)
 
 Teaches the app who your family is so their photos are strongly favored in every build.

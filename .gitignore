@@ -7,6 +7,7 @@ output/
 *.db-shm
 .venv/
 venv/
+.claude/              # machine-specific local config (e.g. preview launch.json)
 
 # Generated, regenerable, or personal — keep out of the repo
 assets/music/          # synthesized by tools/gen_music.py

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "photomemory-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "photomemory.cli", "web", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}

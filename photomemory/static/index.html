@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photo Memory</title>
+<style>
+  :root{--bg:#0f1115;--panel:#181b22;--panel2:#21252e;--line:#2b303b;--fg:#e9ecf1;
+        --muted:#9aa3b2;--accent:#6aa9ff;--accent2:#7ee0a2;--danger:#ff6a6a;}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 "Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+  header{display:flex;align-items:center;gap:16px;padding:14px 20px;background:var(--panel);
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .stat{color:var(--muted);font-size:12px}
+  nav{display:flex;gap:6px;margin-left:auto}
+  nav button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+             padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px}
+  nav button.active{background:var(--accent);color:#06121f;border-color:var(--accent);font-weight:600}
+  main{padding:20px;max-width:1200px;margin:0 auto}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  select,input[type=number]{background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+             padding:7px 10px;border-radius:8px;font-size:13px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;
+        transition:border-color .15s,transform .05s}
+  .card:hover{border-color:var(--accent)}
+  .card h3{margin:0 0 4px;font-size:15px}
+  .card .meta{color:var(--muted);font-size:12px}
+  .card .hl{margin-top:8px;font-size:12px;color:#c7cedb}
+  .btn{background:var(--accent);color:#06121f;border:none;padding:9px 16px;border-radius:9px;
+       cursor:pointer;font-weight:600;font-size:13px}
+  .btn.ghost{background:var(--panel2);color:var(--fg);border:1px solid var(--line);font-weight:500}
+  .btn:disabled{opacity:.5;cursor:default}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
+  .tile{position:relative;border-radius:10px;overflow:hidden;background:#000;aspect-ratio:4/3;
+        border:2px solid transparent}
+  .tile img{width:100%;height:100%;object-fit:cover;display:block;opacity:.55;transition:opacity .15s}
+  .tile.on{border-color:var(--accent2)}
+  .tile.on img{opacity:1}
+  .tile .chk{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:5px;
+       background:rgba(0,0,0,.5);border:1px solid #fff;display:flex;align-items:center;justify-content:center;
+       font-size:13px;color:var(--accent2)}
+  .tile .ppl{position:absolute;bottom:0;left:0;right:0;padding:4px 6px;font-size:11px;
+       background:linear-gradient(transparent,rgba(0,0,0,.8));color:#fff}
+  .badge{display:inline-block;background:var(--accent);color:#06121f;border-radius:6px;padding:0 5px;
+       font-size:10px;font-weight:700;margin-right:3px}
+  .muted{color:var(--muted)} .spacer{flex:1}
+  .vid{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:16px}
+  .vid video{width:100%;border-radius:8px;background:#000}
+  .vid .hd{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);
+       border:1px solid var(--line);padding:10px 18px;border-radius:10px;box-shadow:0 6px 30px #0008;display:none}
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+  .pgrid figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px}
+  .pgrid img{width:100%;border-radius:6px;display:block}
+  .pgrid figcaption{font-size:12px;color:var(--muted);margin-top:6px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:4px 12px;font-size:12px}
+  .spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);
+       border-radius:50%;animation:s .8s linear infinite;display:inline-block;vertical-align:-3px}
+  @keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>📸 Photo Memory</h1>
+  <span class="stat" id="hstat">loading…</span>
+  <nav>
+    <button data-tab="browse" class="active">Browse</button>
+    <button data-tab="videos">Videos</button>
+    <button data-tab="people">People</button>
+  </nav>
+</header>
+<main>
+  <section id="browse">
+    <div class="row">
+      <select id="kind">
+        <option value="month">Months</option>
+        <option value="year">Years</option>
+        <option value="trip">Trips</option>
+      </select>
+      <select id="year"></select>
+      <span class="spacer"></span>
+      <label class="muted">length&nbsp;<input type="number" id="len" value="90" min="20" max="600" style="width:70px"> s</label>
+    </div>
+    <div id="list" class="cards"></div>
+  </section>
+
+  <section id="preview" style="display:none">
+    <div class="row">
+      <button class="btn ghost" id="back">← Back</button>
+      <h2 id="ptitle" style="margin:0"></h2>
+      <span class="spacer"></span>
+      <span class="muted" id="pcount"></span>
+      <label class="muted"><input type="checkbox" id="music" checked> music</label>
+      <button class="btn" id="renderBtn">Render selected</button>
+    </div>
+    <div class="muted" id="psub"></div>
+    <div id="pgrid" class="grid"></div>
+  </section>
+
+  <section id="videos" style="display:none"></section>
+  <section id="people" style="display:none"></section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s), api=(p,o)=>fetch(p,o).then(r=>r.json());
+let curPreview=null;
+
+function toast(msg,ms=2600){const t=$('#toast');t.innerHTML=msg;t.style.display='block';
+  clearTimeout(t._t);if(ms)t._t=setTimeout(()=>t.style.display='none',ms);}
+
+function tab(name){for(const s of ['browse','videos','people','preview'])$('#'+s).style.display='none';
+  $('#'+name).style.display='';document.querySelectorAll('nav button').forEach(b=>
+    b.classList.toggle('active',b.dataset.tab===name));}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{tab(b.dataset.tab);
+  if(b.dataset.tab==='videos')loadVideos();if(b.dataset.tab==='people')loadPeople();});
+
+async function loadStats(){const s=await api('/api/stats');
+  $('#hstat').textContent=`${s.total.toLocaleString()} photos · ${s.range[0]}–${s.range[1]} · ${s.people.length} people enrolled`;
+  const y=$('#year');y.innerHTML='<option value="">All years</option>'+
+    s.years.map(r=>`<option value="${r.year}">${r.year} (${r.count})</option>`).join('');
+  if(s.years[0])y.value=s.years[0].year;
+  window._people=s.people; loadList();}
+
+$('#kind').onchange=loadList; $('#year').onchange=loadList;
+async function loadList(){
+  const kind=$('#kind').value, year=$('#year').value, el=$('#list');
+  el.innerHTML='<span class="muted">loading…</span>';
+  if(kind==='year'){const s=await api('/api/stats');
+    el.innerHTML=s.years.map(r=>card(`${r.year}`,`${r.count} photos`,'',()=>doPreview('year',`${r.year}`))).join('');
+    bind(el,s.years.map(r=>()=>doPreview('year',`${r.year}`)));return;}
+  if(kind==='month'){if(!year){el.innerHTML='<span class="muted">pick a year</span>';return;}
+    const ms=await api('/api/months/'+year);
+    el.innerHTML=ms.map(m=>card(m.label,`${m.count} photos`,m.highlights.join(' · '))).join('');
+    bind(el,ms.map(m=>()=>doPreview('month',m.key)));return;}
+  if(kind==='trip'){const ts=await api('/api/trips'+(year?`?year=${year}`:''));
+    if(!ts.length){el.innerHTML='<span class="muted">no trips detected</span>';return;}
+    el.innerHTML=ts.map(t=>card(t.label,`${t.start} → ${t.end} · ${t.days}d · ${t.count} photos`,t.place||'')).join('');
+    bind(el,ts.map(t=>()=>doPreview('trip',String(t.index),t.year)));return;}
+}
+function card(title,meta,hl){return `<div class="card"><h3>${esc(title)}</h3>
+  <div class="meta">${esc(meta)}</div>${hl?`<div class="hl">${esc(hl)}</div>`:''}</div>`;}
+function bind(el,fns){[...el.querySelectorAll('.card')].forEach((c,i)=>c.onclick=fns[i]);}
+function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+async function poll(jid){for(;;){const j=await api('/api/jobs/'+jid);
+  if(j.status==='done')return j.result; if(j.status==='error')throw new Error(j.error);
+  await new Promise(r=>setTimeout(r,900));}}
+
+async function doPreview(type,key,year){
+  tab('preview');$('#ptitle').textContent='Preparing…';$('#pgrid').innerHTML=
+    '<div class="muted"><span class="spin"></span> scoring & selecting best photos…</div>';
+  $('#psub').textContent='';$('#pcount').textContent='';
+  try{
+    const len=parseFloat($('#len').value)||90;
+    const {job}=await api('/api/preview',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type,key,year:year??null,length:len})});
+    const r=await poll(job); curPreview=r;
+    $('#ptitle').textContent=r.title;$('#psub').textContent=r.subtitle||'';
+    $('#pgrid').innerHTML=r.items.map(it=>tile(it)).join('');
+    [...$('#pgrid').children].forEach(t=>t.onclick=()=>{t.classList.toggle('on');updateCount();});
+    updateCount();
+  }catch(e){$('#pgrid').innerHTML=`<div style="color:var(--danger)">Error: ${esc(e.message)}</div>`;}
+}
+function tile(it){const ppl=it.people.map(p=>`<span class="badge">${esc(p)}</span>`).join('');
+  return `<div class="tile on" data-id="${it.media_id}">
+    <img loading="lazy" src="/api/thumb/${it.media_id}">
+    <div class="chk">✓</div>
+    <div class="ppl">${ppl}${esc(it.date)}</div></div>`;}
+function updateCount(){const on=$('#pgrid').querySelectorAll('.tile.on').length,
+  all=$('#pgrid').querySelectorAll('.tile').length;
+  $('#pcount').textContent=`${on}/${all} selected`;}
+$('#back').onclick=()=>{tab('browse');};
+
+$('#renderBtn').onclick=async()=>{
+  if(!curPreview)return;
+  const ids=[...$('#pgrid').querySelectorAll('.tile.on')].map(t=>+t.dataset.id);
+  if(!ids.length){toast('Select at least one photo');return;}
+  $('#renderBtn').disabled=true;toast('<span class="spin"></span> Rendering video…',0);
+  try{
+    const {job}=await api('/api/render',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({preview_id:curPreview.preview_id,keep_ids:ids,music:$('#music').checked})});
+    const r=await poll(job);
+    toast('✅ Rendered '+r.video);tab('videos');loadVideos();
+  }catch(e){toast('❌ '+esc(e.message),5000);}
+  finally{$('#renderBtn').disabled=false;}
+};
+
+async function loadVideos(){const el=$('#videos');const vs=await api('/api/videos');
+  if(!vs.length){el.innerHTML='<p class="muted">No videos yet — build one from the Browse tab.</p>';return;}
+  el.innerHTML=vs.map(v=>`<div class="vid"><div class="hd"><b>${esc(v.name)}</b>
+    <span class="muted">${v.size_mb} MB</span><span class="spacer"></span>
+    <a class="btn ghost" href="/media/${encodeURIComponent(v.name)}" download>Download</a></div>
+    <video controls preload="metadata" src="/media/${encodeURIComponent(v.name)}"></video></div>`).join('');}
+
+async function loadPeople(){const el=$('#people');const s=await api('/api/stats');
+  const chips=s.people.map(p=>`<span class="chip">${esc(p.name)} · ${p.faces}</span>`).join('')
+    ||'<span class="muted">none enrolled</span>';
+  const ms=await api('/api/montages');
+  el.innerHTML=`<h2>Enrolled people</h2><div class="chips">${chips}</div>
+    <h2 style="margin-top:22px">Face review montages</h2>
+    <p class="muted">From <code>faces cluster</code> / <code>faces enroll</code>. Labeling stays in the CLI for now.</p>
+    <div class="pgrid">${ms.map(n=>`<figure><img loading="lazy" src="/api/montage/${encodeURIComponent(n)}">
+      <figcaption>${esc(n)}</figcaption></figure>`).join('')||'<span class="muted">no montages</span>'}</div>`;}
+
+loadStats();
+</script>
+</body>
+</html>
