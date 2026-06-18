@@ -1,0 +1,11 @@
+# Normalize line endings: store text as LF in the repo, check out native on each OS.
+* text=auto eol=lf
+
+# Treat binaries as binary (no EOL conversion, no diff noise).
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.mp4  binary
+*.wav  binary
+*.db   binary
+*.pth  binary

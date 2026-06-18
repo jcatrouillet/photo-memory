@@ -73,6 +73,47 @@ python -m photomemory.cli build trip --around 2024-06-15
 
 Add `--no-music` to any `build` command for a silent video.
 
+## Face recognition (enrolling family)
+
+Teaches the app who your family is so their photos are strongly favored in every build.
+Faces are detected/embedded on the GPU (facenet-pytorch) and matched per-memory against
+enrolled people; matching runs on the cached frames, so no extra NAS reads.
+
+There are two ways to enroll, and they can be combined:
+
+**A. Auto-cluster, then label** — good for people who appear a lot and look distinct:
+```powershell
+python -m photomemory.cli faces extract --sample 6000   # detect+embed a library sample
+python -m photomemory.cli faces cluster                 # -> montages in output/people_review/
+python -m photomemory.cli faces split 9                 # refine an over-merged cluster
+python -m photomemory.cli faces label 9 "Erwan"         # name a cluster after viewing its montage
+```
+
+**B. Enroll from reference photos** — reliable for anyone clustering can't separate
+(e.g. young siblings, or to avoid a look-alike friend). Point it at folders or specific
+files; it picks the *dominant recurring face* and saves `output/people_review/enrolled_<name>.jpg`
+so you can verify:
+```powershell
+python -m photomemory.cli faces enroll "Julien" "Z:\...\Portrait Julien" --add
+python -m photomemory.cli faces enroll "Julien" "Z:\...\IMG_4197.JPG" "Z:\...\IMG_4316.JPG" --add
+```
+
+**Disambiguating look-alikes (e.g. brothers):** give each person a birthdate, and the
+matcher compares a candidate against each person's *age-appropriate* prototypes (using each
+photo's date), so siblings stop collapsing together:
+```powershell
+python -m photomemory.cli faces birthday "Erwan"  2008-10-12
+python -m photomemory.cli faces birthday "Julien" 2012-01-16
+```
+
+**Date bounds:** restrict when a person can appear (prevents impossible matches):
+```powershell
+python -m photomemory.cli faces lifespan "Benedicte" --until 2016-04-30
+```
+
+`faces people` lists everyone enrolled. Strength of the boost is `scoring.w_family` in
+`config.toml`. Once anyone is enrolled, every `build` favors them automatically.
+
 ## Performance notes
 
 - The first `index` of 350K files reads EXIF per image over SMB; expect it to take a
@@ -86,7 +127,8 @@ Add `--no-music` to any `build` command for a silent video.
 
 ```
 photomemory/   config, db, dates, exif, geocode, scanner, grouping,
-               dedupe, selector, memory, render, cli
+               dedupe, selector, memory, render, cli,
+               facerec (GPU embeddings), faceindex (cluster/enroll/match)
                quality/  heuristics, faces, aesthetic, score
 assets/music/  bundled synthesized tracks (gen_music.py)
 data/          catalog.db + frame cache (gitignored)
