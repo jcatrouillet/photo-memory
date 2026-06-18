@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+data/
+output/
+*.db
+*.db-wal
+*.db-shm
+.venv/
+venv/
+
+# Generated, regenerable, or personal — keep out of the repo
+assets/music/          # synthesized by tools/gen_music.py
+people_review/         # face montages (contain family faces)
+*.mp4
+*.wav

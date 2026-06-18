@@ -1,0 +1,30 @@
+# Core
+Pillow>=10.0
+pillow-heif>=0.16        # HEIC support (decode + EXIF/GPS)
+piexif>=1.1.3            # robust EXIF/GPS parsing
+imagehash>=4.3           # perceptual hashing for dedup
+numpy>=1.26
+opencv-python>=4.9       # sharpness, exposure, face detection (DNN)
+typer>=0.12             # CLI
+rich>=13.0              # pretty CLI tables/output
+tqdm>=4.66              # progress bars
+reverse_geocoder>=1.5.1 # offline reverse geocoding (GPS -> place)
+
+# Video rendering
+moviepy>=1.0.3
+imageio-ffmpeg>=0.4.9    # bundles a static ffmpeg binary (no system install)
+
+# ML scoring (GPU). Install the CUDA build of torch separately, e.g.:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+#   (use cu124, not cu121 — cu121 has no Python 3.13 wheels)
+# These are optional: the pipeline runs on heuristics alone if torch/pyiqa are missing.
+# torch>=2.2
+# torchvision>=0.17
+# pyiqa>=0.1.10          # NIMA / aesthetic scoring
+
+# Face recognition (GPU; optional). Needs torch (above) already installed.
+# facenet-pytorch pins an old numpy, so install it without deps:
+#   pip install scikit-learn
+#   pip install --no-deps facenet-pytorch
+# scikit-learn>=1.4      # DBSCAN clustering of face embeddings
+# facenet-pytorch>=2.6   # MTCNN detection + VGGFace2 embeddings
