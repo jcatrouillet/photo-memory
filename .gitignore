@@ -1,16 +1,22 @@
+# Python
 __pycache__/
 *.pyc
+.venv/
+venv/
+
+# Local data, caches, and outputs (never commit personal content)
 data/
 output/
 *.db
 *.db-wal
 *.db-shm
-.venv/
-venv/
-.claude/              # machine-specific local config (e.g. preview launch.json)
 
-# Generated, regenerable, or personal — keep out of the repo
-assets/music/          # synthesized by tools/gen_music.py
-people_review/         # face montages (contain family faces)
+# Generated / regenerable / personal media
+# (assets/music is synthesized by tools/gen_music.py; montages contain family faces)
+assets/music/
+people_review/
 *.mp4
 *.wav
+
+# Machine-specific local config (e.g. preview launch.json)
+.claude/
