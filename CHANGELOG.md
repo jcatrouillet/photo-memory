@@ -16,8 +16,11 @@ All notable changes to this project are documented here.
   random; `/api/tracks`, `/api/track/{name}`, and a `track` render option.
 
 ### Changed
-- **Music**: replaced the slow calm/reflective beds with energetic tracks (118–132 BPM,
-  kick + hi-hat groove). Now arranged with song structure (intro/verse/chorus + lead melody/fills) so they no longer loop the same bars.
+- **Music**: three genuinely distinct styles (not just tempo changes) —
+  `trip_hop` (Massive Attack "Teardrop" vibe: harpsichord arp, sub-bass, halftime reverb
+  snare), `downtempo` (Morcheeba "The Sea" vibe: Rhodes 7th chords, swung groove, sax lead),
+  and `stomp` (Queen "We Will Rock You" vibe: stomp-stomp-clap, power-chord stabs, anthem
+  lead). Each has its own instruments, rhythm, and structure.
 - **Even selection**: when there are more day-groups than slots, sample groups evenly
   across the timeline instead of front-loading the earliest days.
 - **Tighter de-duplication** (pHash threshold 8 → 12) so near-identical shots aren't both picked.
