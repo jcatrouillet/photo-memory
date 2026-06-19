@@ -84,8 +84,7 @@ def harpsichord(f, dur, gain=0.22):
 def rhodes(f, dur, gain=0.2):
     n, t = _t(dur)
     car = np.sin(2 * np.pi * f * t + 3 * np.exp(-4 * t) * np.sin(2 * np.pi * 2 * f * t))
-    trem = 1 + 0.12 * np.sin(2 * np.pi * 5 * t)
-    return car * adsr(n, a=0.01, d=0.5, s=0.6, r=0.3) * trem * gain
+    return car * adsr(n, a=0.01, d=0.5, s=0.6, r=0.3) * gain
 
 
 def subbass(f, dur, gain=0.55):
