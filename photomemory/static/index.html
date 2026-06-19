@@ -99,6 +99,9 @@
       <button class="btn ghost" id="fillBtn">Fill</button>
       <button class="btn ghost" id="addBtn">+ Add photos</button>
       <label class="muted"><input type="checkbox" id="music" checked> music</label>
+      <select id="track" title="Music track"><option value="">🎵 Auto</option></select>
+      <button class="btn ghost" id="playBtn" title="Preview track">▶</button>
+      <audio id="audio" style="display:none"></audio>
       <button class="btn" id="renderBtn">Render selected</button>
     </div>
     <div class="muted" id="psub"></div>
@@ -128,7 +131,20 @@ async function loadStats(){const s=await api('/api/stats');
   const y=$('#year');y.innerHTML='<option value="">All years</option>'+
     s.years.map(r=>`<option value="${r.year}">${r.year} (${r.count})</option>`).join('');
   if(s.years[0])y.value=s.years[0].year;
-  window._people=s.people; loadList();}
+  window._people=s.people;
+  const tracks=await api('/api/tracks');
+  $('#track').innerHTML='<option value="">🎵 Auto</option>'+
+    tracks.map(t=>`<option value="${esc(t)}">${esc(t.replace(/\.[^.]+$/,''))}</option>`).join('');
+  loadList();}
+
+(function(){const audio=$('#audio');
+  $('#playBtn').onclick=()=>{const t=$('#track').value;
+    if(!t){toast('“Auto” picks a track at random — choose one to preview');return;}
+    if(!audio.paused && audio.dataset.t===t){audio.pause();$('#playBtn').textContent='▶';return;}
+    audio.src='/api/track/'+encodeURIComponent(t);audio.dataset.t=t;audio.play();
+    $('#playBtn').textContent='⏸';audio.onended=()=>$('#playBtn').textContent='▶';};
+  $('#track').onchange=()=>{audio.pause();$('#playBtn').textContent='▶';};
+})();
 
 $('#kind').onchange=loadList; $('#year').onchange=loadList;
 async function loadList(){
@@ -246,7 +262,7 @@ $('#renderBtn').onclick=async()=>{
   try{
     const {job}=await api('/api/render',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({title:curPreview.title,subtitle:curPreview.subtitle,
-        media_ids:ids,music:$('#music').checked})});
+        media_ids:ids,music:$('#music').checked,track:$('#track').value||null})});
     const r=await poll(job);
     toast('✅ Rendered '+r.video);tab('videos');loadVideos();
   }catch(e){toast('❌ '+esc(e.message),5000);}

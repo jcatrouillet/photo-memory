@@ -131,19 +131,34 @@ def _slide(frame_path: Path, duration: float, size: tuple[int, int],
 
 # --- Music ---------------------------------------------------------------------
 
-def _pick_music() -> Path | None:
-    music_dir = get_config().raw["paths"].get("music_dir")
-    base = Path(music_dir) if music_dir else (get_config().db_path.parent.parent / "assets" / "music")
+def music_dir() -> Path:
+    md = get_config().raw["paths"].get("music_dir")
+    return Path(md) if md else (get_config().db_path.parent.parent / "assets" / "music")
+
+
+def list_tracks() -> list[str]:
+    base = music_dir()
+    if not base.exists():
+        return []
+    return sorted(p.name for p in base.iterdir()
+                  if p.suffix.lower() in (".mp3", ".wav", ".m4a", ".ogg"))
+
+
+def _pick_music(name: str | None = None) -> Path | None:
+    base = music_dir()
     if not base.exists():
         return None
-    tracks = [p for p in base.iterdir() if p.suffix.lower() in (".mp3", ".wav", ".m4a", ".ogg")]
+    if name:
+        p = base / Path(name).name
+        return p if p.exists() else None
+    tracks = [base / n for n in list_tracks()]
     return random.choice(tracks) if tracks else None
 
 
 # --- Public entrypoint ---------------------------------------------------------
 
 def render_memory(memory: Memory, out_path: Path, *, music: bool = True,
-                  length_seconds: float | None = None) -> Path:
+                  length_seconds: float | None = None, track: str | None = None) -> Path:
     cfg = get_config().render
     size = (int(cfg["width"]), int(cfg["height"]))
     fps = int(cfg["fps"])
@@ -178,9 +193,9 @@ def render_memory(memory: Memory, out_path: Path, *, music: bool = True,
     video = concatenate_videoclips(faded, method="compose", padding=-transition)
 
     if music:
-        track = _pick_music()
-        if track:
-            audio = AudioFileClip(str(track))
+        chosen = _pick_music(track)
+        if chosen:
+            audio = AudioFileClip(str(chosen))
             audio = afx.audio_loop(audio, duration=video.duration)
             audio = audio.fx(afx.audio_fadein, 1.0).fx(afx.audio_fadeout, 2.0)
             video = video.set_audio(audio)

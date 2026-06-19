@@ -12,6 +12,8 @@ All notable changes to this project are documented here.
   some — and now respects removals (won't re-add photos you deselected).
 - **Custom range memories**: build a memory across any date span (multiple months /
   locations) from the web UI (`build_custom`, `type=custom`).
+- **Music picker**: choose a specific track per video (with in-browser preview) instead of
+  random; `/api/tracks`, `/api/track/{name}`, and a `track` render option.
 
 ### Changed
 - **Music**: replaced the slow calm/reflective beds with energetic tracks (118–132 BPM,

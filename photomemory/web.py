@@ -117,6 +117,21 @@ def videos():
 
 # --- media serving -------------------------------------------------------------
 
+@app.get("/api/tracks")
+def tracks():
+    from .render import list_tracks
+    return list_tracks()
+
+
+@app.get("/api/track/{name}")
+def track(name: str):
+    from .render import music_dir
+    p = music_dir() / Path(name).name
+    if not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="audio/wav")
+
+
 @app.get("/api/thumb/{media_id}")
 def thumb(media_id: int):
     with db.connect() as c:
@@ -271,6 +286,7 @@ class RenderReq(BaseModel):
     subtitle: str = ""
     media_ids: list[int]      # the final, user-edited set (any photos, any order)
     music: bool = True
+    track: str | None = None  # specific music file, or None for random
 
 
 def _items(selection, captions):
@@ -355,7 +371,7 @@ def render(req: RenderReq):
         mem = memory_from_ids(req.title, req.subtitle, req.media_ids)
         slug = re.sub(r"[^A-Za-z0-9]+", "_", req.title).strip("_").lower() or "memory"
         out = get_config().output_dir / f"{slug}.mp4"
-        render_memory(mem, out, music=req.music)
+        render_memory(mem, out, music=req.music, track=req.track)
         return {"video": out.name}
 
     return {"job": _submit(fn)}
