@@ -39,8 +39,10 @@
   .tile.on{border-color:var(--accent2)}
   .tile.on img{opacity:1}
   .tile .chk{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:5px;
-       background:rgba(0,0,0,.5);border:1px solid #fff;display:flex;align-items:center;justify-content:center;
-       font-size:13px;color:var(--accent2)}
+       background:rgba(0,0,0,.45);border:2px solid #fff;display:flex;align-items:center;justify-content:center;
+       font-size:14px;font-weight:700;color:#06121f}
+  .tile.on .chk{background:var(--accent2);border-color:var(--accent2)}
+  .tile.on .chk::after{content:'✓'}
   .tile .ppl{position:absolute;bottom:0;left:0;right:0;padding:4px 6px;font-size:11px;
        background:linear-gradient(transparent,rgba(0,0,0,.8));color:#fff}
   .badge{display:inline-block;background:var(--accent);color:#06121f;border-radius:6px;padding:0 5px;
@@ -79,6 +81,7 @@
         <option value="month">Months</option>
         <option value="year">Years</option>
         <option value="trip">Trips</option>
+        <option value="custom">Custom range</option>
       </select>
       <select id="year"></select>
       <span class="spacer"></span>
@@ -138,6 +141,14 @@ async function loadList(){
     const ms=await api('/api/months/'+year);
     el.innerHTML=ms.map(m=>card(m.label,`${m.count} photos`,m.highlights.join(' · '))).join('');
     bind(el,ms.map(m=>()=>doPreview('month',m.key)));return;}
+  if(kind==='custom'){
+    el.innerHTML=`<div class="card" style="cursor:default;max-width:560px">
+      <h3>Custom memory (across months / locations)</h3>
+      <div class="meta">Pick any date range — e.g. a multi-stop trip or a whole season.</div>
+      <div class="row" style="margin-top:10px"><input id="cu_title" placeholder="Title, e.g. Asia 2024" style="flex:1"></div>
+      <div class="row">from <input type="date" id="cu_start"> to <input type="date" id="cu_end"></div>
+      <button class="btn" onclick="previewCustom()">Preview memory</button>
+    </div>`; return;}
   if(kind==='trip'){const ts=await api('/api/trips'+(year?`?year=${year}`:''));
     if(!ts.length){el.innerHTML='<span class="muted">no trips detected</span>';return;}
     el.innerHTML=ts.map(t=>card(t.label,`${t.start} → ${t.end} · ${t.days}d · ${t.count} photos`,t.place||'')).join('');
@@ -152,15 +163,15 @@ async function poll(jid){for(;;){const j=await api('/api/jobs/'+jid);
   if(j.status==='done')return j.result; if(j.status==='error')throw new Error(j.error);
   await new Promise(r=>setTimeout(r,900));}}
 
-async function doPreview(type,key,year){
+async function doPreview(type,key,year,opts={}){
   tab('preview');$('#ptitle').textContent='Preparing…';$('#pgrid').innerHTML=
     '<div class="muted"><span class="spin"></span> scoring & selecting best photos…</div>';
   $('#psub').textContent='';$('#pcount').textContent='';
   try{
     const len=parseFloat($('#len').value)||90;
     const {job}=await api('/api/preview',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type,key,year:year??null,length:len})});
-    const r=await poll(job); curPreview={...r,type,key,year};
+      body:JSON.stringify({type,key,year:year??null,length:len,...opts})});
+    const r=await poll(job); curPreview={...r,type,key,year,...opts,excluded:new Set()};
     $('#ptitle').textContent=r.title;$('#psub').textContent=r.subtitle||'';
     $('#fillBtn').textContent='Fill to '+r.target;
     $('#pgrid').innerHTML=r.items.map(it=>tile(it,true)).join('');
@@ -170,14 +181,24 @@ async function doPreview(type,key,year){
 function tile(it,on){const ppl=(it.people||[]).map(p=>`<span class="badge">${esc(p)}</span>`).join('');
   return `<div class="tile${on?' on':''}" data-id="${it.media_id}">
     <img loading="lazy" src="/api/thumb/${it.media_id}">
-    <div class="chk">✓</div>
+    <div class="chk"></div>
     <div class="ppl">${ppl}${esc(it.date)}</div></div>`;}
 function bindTiles(){[...$('#pgrid').children].forEach(t=>t.onclick=()=>{
-  t.classList.toggle('on');updateCount();});}
+  t.classList.toggle('on');
+  const id=+t.dataset.id;
+  if(curPreview&&curPreview.excluded){t.classList.contains('on')?curPreview.excluded.delete(id):curPreview.excluded.add(id);}
+  updateCount();});}
 function updateCount(){const on=$('#pgrid').querySelectorAll('.tile.on').length,
   all=$('#pgrid').querySelectorAll('.tile').length;
   $('#pcount').textContent=`${on}/${all} selected`;}
 $('#back').onclick=()=>{tab('browse');};
+
+function previewCustom(){
+  const title=$('#cu_title').value.trim(), start=$('#cu_start').value, end=$('#cu_end').value;
+  if(!start||!end){toast('Pick a start and end date');return;}
+  if(start>end){toast('Start date must be before end date');return;}
+  doPreview('custom','',null,{start,end,title});
+}
 
 $('#addBtn').onclick=async()=>{
   if(!curPreview)return;
@@ -185,6 +206,8 @@ $('#addBtn').onclick=async()=>{
   try{
     const q=new URLSearchParams({type:curPreview.type,key:curPreview.key||''});
     if(curPreview.year!=null)q.set('year',curPreview.year);
+    if(curPreview.start)q.set('start',curPreview.start);
+    if(curPreview.end)q.set('end',curPreview.end);
     const pool=await api('/api/period_media?'+q);
     const have=new Set([...$('#pgrid').querySelectorAll('.tile')].map(t=>+t.dataset.id));
     const add=pool.filter(p=>!have.has(p.media_id));
@@ -205,6 +228,7 @@ $('#fillBtn').onclick=()=>{
   for(const it of (curPreview.extras||[])){
     if(onSet.size>=target)break;
     if(onSet.has(it.media_id))continue;
+    if(curPreview.excluded&&curPreview.excluded.has(it.media_id))continue; // don't re-add removed
     const t=tiles.get(it.media_id);
     if(t)t.classList.add('on');
     else $('#pgrid').insertAdjacentHTML('beforeend',tile(it,true));

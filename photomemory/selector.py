@@ -43,19 +43,27 @@ def distribute(pool: list[Selected], target: int) -> list[Selected]:
     for g in groups.values():
         g.sort(key=lambda s: s.rank, reverse=True)
 
-    # Order groups by chronology of their best shot so round-robin feels temporal.
+    # Order groups by chronology of their best shot.
     ordered_groups = sorted(
         groups.values(), key=lambda g: min(s.capture_dt for s in g)
     )
 
     chosen: list[Selected] = []
-    idx = 0
-    while len(chosen) < target and any(idx < len(g) for g in ordered_groups):
-        for g in ordered_groups:
-            if idx < len(g):
-                chosen.append(g[idx])
-                if len(chosen) >= target:
-                    break
-        idx += 1
+    if len(ordered_groups) >= target:
+        # More groups than slots: sample groups evenly across the whole timeline
+        # (avoids front-loading the earliest days), taking the best shot from each.
+        step = len(ordered_groups) / target
+        for i in range(target):
+            chosen.append(ordered_groups[int(i * step)][0])
+    else:
+        # Fewer groups than slots: round-robin best-first within each group.
+        idx = 0
+        while len(chosen) < target and any(idx < len(g) for g in ordered_groups):
+            for g in ordered_groups:
+                if idx < len(g):
+                    chosen.append(g[idx])
+                    if len(chosen) >= target:
+                        break
+            idx += 1
 
     return sorted(chosen, key=lambda s: s.capture_dt)

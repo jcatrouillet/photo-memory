@@ -153,6 +153,29 @@ def build_year(year: int, target: int) -> Memory:
     )
 
 
+def build_custom(title: str, start: str, end: str, target: int) -> Memory:
+    """A custom memory over an arbitrary date range (spans months/locations).
+
+    start/end are ISO dates (inclusive). Photos are grouped by day; captions come from
+    each day's folder title or reverse-geocoded place.
+    """
+    with db.connect() as conn:
+        rows = conn.execute(
+            """SELECT m.id, m.capture_dt, m.place, f.title
+               FROM media m LEFT JOIN folders f ON f.id = m.folder_id
+               WHERE m.media_type='image' AND m.capture_dt >= ? AND m.capture_dt <= ?""",
+            (start, end + "T23:59:59"),
+        ).fetchall()
+    media_to_group = {r["id"]: (r["capture_dt"] or "")[:10] for r in rows}
+    captions: dict[str, str] = {}
+    for r in rows:
+        day = (r["capture_dt"] or "")[:10]
+        captions.setdefault(day, r["title"] or r["place"] or day)
+    selection, extras = _assemble(media_to_group, target, score_cap=max(target * 15, 500))
+    return Memory(title=title or f"{start} - {end}", subtitle=f"{start} - {end}",
+                  selection=selection, captions=captions, extras=extras)
+
+
 def build_trip(trip: Trip, target: int) -> Memory:
     with db.connect() as conn:
         rows = conn.execute(

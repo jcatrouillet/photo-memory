@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import imagehash
 
-HAMMING_THRESHOLD = 8  # pHash distance below which two images are "the same shot"
+HAMMING_THRESHOLD = 12  # pHash distance below which two images are "the same shot"
 
 
 @dataclass

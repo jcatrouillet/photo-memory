@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from . import db, faceindex
 from .config import get_config
 from .grouping import detect_trips, year_events
-from .memory import Memory, build_month, build_trip, build_year, target_count
+from .memory import Memory, build_custom, build_month, build_trip, build_year, target_count
 from .quality.score import ensure_frame
 from .render import render_memory
 
@@ -257,10 +257,13 @@ def face_split(req: SplitReq):
 # --- preview & render ----------------------------------------------------------
 
 class PreviewReq(BaseModel):
-    type: str          # month | year | trip
+    type: str          # month | year | trip | custom
     key: str = ""      # "2024-10" for month, "2024" for year, trip index for trip
     year: int | None = None
     length: float | None = None
+    start: str | None = None   # custom range (ISO date)
+    end: str | None = None
+    title: str | None = None   # custom title
 
 
 class RenderReq(BaseModel):
@@ -292,6 +295,10 @@ def preview(req: PreviewReq):
         elif req.type == "trip":
             trs = detect_trips(year=req.year)
             mem = build_trip(trs[int(req.key)], tgt)
+        elif req.type == "custom":
+            if not req.start or not req.end:
+                raise ValueError("custom range needs start and end dates")
+            mem = build_custom(req.title or "", req.start, req.end, tgt)
         else:
             raise ValueError("bad type")
         pid = uuid.uuid4().hex[:12]
@@ -306,11 +313,16 @@ def preview(req: PreviewReq):
 
 
 @app.get("/api/period_media")
-def period_media(type: str, key: str = "", year: int | None = None, limit: int = 1500):
-    """All image photos in a month/year/trip (id + date), for the 'add photos' picker."""
+def period_media(type: str, key: str = "", year: int | None = None, limit: int = 1500,
+                 start: str | None = None, end: str | None = None):
+    """All image photos in a month/year/trip/custom range (id + date), for the picker."""
     from datetime import date as _date
     with db.connect() as c:
-        if type == "month":
+        if type == "custom":
+            rows = c.execute("SELECT id, capture_dt FROM media WHERE media_type='image' "
+                             "AND capture_dt>=? AND capture_dt<=? ORDER BY capture_dt LIMIT ?",
+                             (start, (end or "") + "T23:59:59", limit)).fetchall()
+        elif type == "month":
             y, m = (int(x) for x in key.split("-"))
             start = _date(y, m, 1).isoformat()
             end = (_date(y + 1, 1, 1) if m == 12 else _date(y, m + 1, 1)).isoformat()

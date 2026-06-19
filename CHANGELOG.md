@@ -8,10 +8,20 @@ All notable changes to this project are documented here.
 - **Web editor**: in the preview, "Add photos" loads the rest of the period so you can
   add *and* remove shots before rendering; render now works from any edited photo set
   (`memory_from_ids`, `/api/period_media`).
+- **"Fill to N"**: tops the selection back up with the next-best photos after you remove
+  some — and now respects removals (won't re-add photos you deselected).
+- **Custom range memories**: build a memory across any date span (multiple months /
+  locations) from the web UI (`build_custom`, `type=custom`).
 
 ### Changed
 - **Music**: replaced the slow calm/reflective beds with energetic tracks (118–132 BPM,
   kick + hi-hat groove + arpeggio) in `tools/gen_music.py`.
+- **Even selection**: when there are more day-groups than slots, sample groups evenly
+  across the timeline instead of front-loading the earliest days.
+- **Tighter de-duplication** (pHash threshold 8 → 12) so near-identical shots aren't both picked.
+
+### Fixed
+- Unselected photo tiles now show an empty checkbox (were still showing the green tick).
 
 ## [0.1.0] - 2026-06-16
 
