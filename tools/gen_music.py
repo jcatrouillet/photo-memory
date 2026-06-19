@@ -101,6 +101,28 @@ def powerchord(root, octave, dur, gain=0.16):
     return sig * adsr(n, a=0.005, d=0.25, s=0.5, r=0.2) * gain / 3
 
 
+def guitar(f, dur, gain=0.25, drive=0.0):
+    """Plucked electric-guitar tone (harmonic-rich pluck); drive>0 adds overdrive."""
+    n, t = _t(dur)
+    sig = sum((1.0 / h) * np.sin(2 * np.pi * f * h * t) for h in range(1, 9))
+    sig *= np.exp(-2.5 * t) * (1 - np.exp(-400 * t))
+    if drive:
+        sig = np.tanh(sig * (1 + 6 * drive))
+    return sig * gain
+
+
+def guitar_chord(root, octave, dur, gain=0.2, drive=0.9):
+    """Distorted electric-guitar power chord (root + fifth + octave)."""
+    n, t = _t(dur)
+    sig = np.zeros(n)
+    for f in (freq(root, octave), freq(root, octave) * 1.5, freq(root, octave) * 2):
+        sig += sum((1.0 / h) * np.sin(2 * np.pi * f * h * t) for h in range(1, 7))
+    sig *= np.exp(-2.0 * t) * (1 - np.exp(-400 * t))
+    if drive:
+        sig = np.tanh(sig * (1 + 6 * drive))
+    return sig * gain
+
+
 def lead(f, dur, gain=0.24, bright=False):
     n, t = _t(dur)
     vib = 1 + 0.007 * np.sin(2 * np.pi * 5.5 * t)
@@ -195,10 +217,11 @@ def build_downtempo(bpm=92):
         place(perc, brush(0.32), t0 + beat); place(perc, brush(0.32), t0 + 3 * beat)
         for e in range(4):
             place(perc, hat(0.1), t0 + e * beat + beat / 2 + 0.05 * beat)
-    pos = 8 * bar; i = 0                                  # sax lead enters second half
+    pos = 8 * bar; i = 0                                  # clean electric guitar lead, 2nd half
     while pos < bars * bar - beat:
         nm, o, bts = sax[i % len(sax)]
-        place(ld, lead(freq(nm, o), bts * beat * 0.95, gain=0.2), pos); pos += bts * beat; i += 1
+        place(ld, guitar(freq(nm, o), bts * beat * 0.95, gain=0.22, drive=0.12), pos)
+        pos += bts * beat; i += 1
     return soft_reverb(keys + 0.9 * ld) + bass + 0.7 * perc
 
 
@@ -222,15 +245,16 @@ def build_stomp(bpm=81):
                 place(perc, clap(0.7), t0 + (half + 1) * beat)
             if sec in ("verse", "chorus", "outro"):
                 place(bass, subbass(freq("E", 2), bar * 0.6, 0.5), t0)
-            if sec in ("chorus", "outro"):               # power-chord stabs on the claps
+            if sec in ("chorus", "outro"):               # distorted guitar power chords on claps
                 for half in (0, 2):
-                    place(chords_buf, powerchord("E", 3, beat * 0.8, 0.18), t0 + (half + 1) * beat)
+                    place(chords_buf, guitar_chord("E", 3, beat * 0.9, 0.2, drive=1.0),
+                          t0 + (half + 1) * beat)
             bar_i += 1
     pos = (4 + 8) * bar; i = 0                            # anthem lead over first chorus on
     end = (4 + 8 + 8 + 8 + 8) * bar
     while pos < end - beat:
         nm, o, bts = melody[i % len(melody)]
-        place(ld, lead(freq(nm, o), bts * beat * 0.9, gain=0.26, bright=True), pos)
+        place(ld, guitar(freq(nm, o), bts * beat * 0.9, gain=0.28, drive=0.7), pos)
         pos += bts * beat; i += 1
     return soft_reverb(chords_buf + 0.9 * ld) + bass + perc
 
