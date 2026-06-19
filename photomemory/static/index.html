@@ -93,6 +93,7 @@
       <h2 id="ptitle" style="margin:0"></h2>
       <span class="spacer"></span>
       <span class="muted" id="pcount"></span>
+      <button class="btn ghost" id="addBtn">+ Add photos</button>
       <label class="muted"><input type="checkbox" id="music" checked> music</label>
       <button class="btn" id="renderBtn">Render selected</button>
     </div>
@@ -158,22 +159,40 @@ async function doPreview(type,key,year){
     const len=parseFloat($('#len').value)||90;
     const {job}=await api('/api/preview',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type,key,year:year??null,length:len})});
-    const r=await poll(job); curPreview=r;
+    const r=await poll(job); curPreview={...r,type,key,year};
     $('#ptitle').textContent=r.title;$('#psub').textContent=r.subtitle||'';
-    $('#pgrid').innerHTML=r.items.map(it=>tile(it)).join('');
-    [...$('#pgrid').children].forEach(t=>t.onclick=()=>{t.classList.toggle('on');updateCount();});
-    updateCount();
+    $('#pgrid').innerHTML=r.items.map(it=>tile(it,true)).join('');
+    bindTiles(); updateCount();
   }catch(e){$('#pgrid').innerHTML=`<div style="color:var(--danger)">Error: ${esc(e.message)}</div>`;}
 }
-function tile(it){const ppl=it.people.map(p=>`<span class="badge">${esc(p)}</span>`).join('');
-  return `<div class="tile on" data-id="${it.media_id}">
+function tile(it,on){const ppl=(it.people||[]).map(p=>`<span class="badge">${esc(p)}</span>`).join('');
+  return `<div class="tile${on?' on':''}" data-id="${it.media_id}">
     <img loading="lazy" src="/api/thumb/${it.media_id}">
     <div class="chk">✓</div>
     <div class="ppl">${ppl}${esc(it.date)}</div></div>`;}
+function bindTiles(){[...$('#pgrid').children].forEach(t=>t.onclick=()=>{
+  t.classList.toggle('on');updateCount();});}
 function updateCount(){const on=$('#pgrid').querySelectorAll('.tile.on').length,
   all=$('#pgrid').querySelectorAll('.tile').length;
   $('#pcount').textContent=`${on}/${all} selected`;}
 $('#back').onclick=()=>{tab('browse');};
+
+$('#addBtn').onclick=async()=>{
+  if(!curPreview)return;
+  const btn=$('#addBtn');btn.disabled=true;const old=btn.textContent;btn.textContent='Loading…';
+  try{
+    const q=new URLSearchParams({type:curPreview.type,key:curPreview.key||''});
+    if(curPreview.year!=null)q.set('year',curPreview.year);
+    const pool=await api('/api/period_media?'+q);
+    const have=new Set([...$('#pgrid').querySelectorAll('.tile')].map(t=>+t.dataset.id));
+    const add=pool.filter(p=>!have.has(p.media_id));
+    if(!add.length){toast('No more photos in this period');btn.textContent=old;btn.disabled=false;return;}
+    $('#pgrid').insertAdjacentHTML('beforeend',add.map(it=>tile(it,false)).join(''));
+    bindTiles();updateCount();
+    toast(`Added ${add.length} more photos — click to include them`);
+  }catch(e){toast('❌ '+esc(e.message),4000);}
+  finally{btn.textContent=old;btn.disabled=false;}
+};
 
 $('#renderBtn').onclick=async()=>{
   if(!curPreview)return;
@@ -182,7 +201,8 @@ $('#renderBtn').onclick=async()=>{
   $('#renderBtn').disabled=true;toast('<span class="spin"></span> Rendering video…',0);
   try{
     const {job}=await api('/api/render',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({preview_id:curPreview.preview_id,keep_ids:ids,music:$('#music').checked})});
+      body:JSON.stringify({title:curPreview.title,subtitle:curPreview.subtitle,
+        media_ids:ids,music:$('#music').checked})});
     const r=await poll(job);
     toast('✅ Rendered '+r.video);tab('videos');loadVideos();
   }catch(e){toast('❌ '+esc(e.message),5000);}

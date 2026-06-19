@@ -264,8 +264,9 @@ class PreviewReq(BaseModel):
 
 
 class RenderReq(BaseModel):
-    preview_id: str
-    keep_ids: list[int]
+    title: str
+    subtitle: str = ""
+    media_ids: list[int]      # the final, user-edited set (any photos, any order)
     music: bool = True
 
 
@@ -302,22 +303,45 @@ def preview(req: PreviewReq):
     return {"job": _submit(fn)}
 
 
+@app.get("/api/period_media")
+def period_media(type: str, key: str = "", year: int | None = None, limit: int = 1500):
+    """All image photos in a month/year/trip (id + date), for the 'add photos' picker."""
+    from datetime import date as _date
+    with db.connect() as c:
+        if type == "month":
+            y, m = (int(x) for x in key.split("-"))
+            start = _date(y, m, 1).isoformat()
+            end = (_date(y + 1, 1, 1) if m == 12 else _date(y, m + 1, 1)).isoformat()
+            rows = c.execute("SELECT id, capture_dt FROM media WHERE media_type='image' "
+                             "AND capture_dt>=? AND capture_dt<? ORDER BY capture_dt LIMIT ?",
+                             (start, end, limit)).fetchall()
+        elif type == "year":
+            y = int(key)
+            rows = c.execute("SELECT id, capture_dt FROM media WHERE media_type='image' "
+                             "AND capture_dt>=? AND capture_dt<? ORDER BY capture_dt LIMIT ?",
+                             (_date(y, 1, 1).isoformat(), _date(y + 1, 1, 1).isoformat(), limit)).fetchall()
+        elif type == "trip":
+            tr = detect_trips(year=year)[int(key)]
+            ids = tr.media_ids[:limit]
+            rows = c.execute(f"SELECT id, capture_dt FROM media WHERE id IN "
+                             f"({','.join('?' * len(ids))}) ORDER BY capture_dt", ids).fetchall() if ids else []
+        else:
+            raise HTTPException(400, "bad type")
+    return [{"media_id": r["id"], "date": (r["capture_dt"] or "")[:10]} for r in rows]
+
+
 @app.post("/api/render")
 def render(req: RenderReq):
-    mem = _previews.get(req.preview_id)
-    if not mem:
-        raise HTTPException(404, "preview expired; re-run preview")
-    keep = set(req.keep_ids)
+    if not req.media_ids:
+        raise HTTPException(400, "nothing selected")
 
     def fn():
-        sel = [s for s in mem.selection if s.media_id in keep]
-        if not sel:
-            raise ValueError("nothing selected")
-        sub = Memory(title=mem.title, subtitle=mem.subtitle, selection=sel, captions=mem.captions)
         import re
-        slug = re.sub(r"[^A-Za-z0-9]+", "_", mem.title).strip("_").lower() or "memory"
+        from .memory import memory_from_ids
+        mem = memory_from_ids(req.title, req.subtitle, req.media_ids)
+        slug = re.sub(r"[^A-Za-z0-9]+", "_", req.title).strip("_").lower() or "memory"
         out = get_config().output_dir / f"{slug}.mp4"
-        render_memory(sub, out, music=req.music)
+        render_memory(mem, out, music=req.music)
         return {"video": out.name}
 
     return {"job": _submit(fn)}

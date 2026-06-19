@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+- **Web editor**: in the preview, "Add photos" loads the rest of the period so you can
+  add *and* remove shots before rendering; render now works from any edited photo set
+  (`memory_from_ids`, `/api/period_media`).
+
+### Changed
+- **Music**: replaced the slow calm/reflective beds with energetic tracks (118–132 BPM,
+  kick + hi-hat groove + arpeggio) in `tools/gen_music.py`.
+
 ## [0.1.0] - 2026-06-16
 
 Initial version: a local CLI that turns a NAS photo library into iPhone-style memory videos.

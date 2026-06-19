@@ -166,3 +166,29 @@ def build_trip(trip: Trip, target: int) -> Memory:
 
 def target_count(length_seconds: float, seconds_per_photo: float) -> int:
     return max(5, round(length_seconds / max(0.5, seconds_per_photo)))
+
+
+def memory_from_ids(title: str, subtitle: str, media_ids: list[int]) -> Memory:
+    """Build a Memory from an explicit, user-edited set of photos (chronological).
+
+    Used by the web editor so photos can be freely added/removed before rendering.
+    Captions come from each day's folder title or reverse-geocoded place.
+    """
+    if not media_ids:
+        return Memory(title=title, subtitle=subtitle, selection=[], captions={})
+    with db.connect() as conn:
+        rows = conn.execute(
+            f"""SELECT m.id, m.path, m.capture_dt, m.place, f.title
+                FROM media m LEFT JOIN folders f ON f.id = m.folder_id
+                WHERE m.id IN ({','.join('?' * len(media_ids))})""",
+            media_ids,
+        ).fetchall()
+    rows = sorted(rows, key=lambda r: r["capture_dt"] or "")
+    captions: dict[str, str] = {}
+    selection: list[Selected] = []
+    for r in rows:
+        day = (r["capture_dt"] or "")[:10]
+        captions.setdefault(day, r["title"] or r["place"] or day)
+        selection.append(Selected(media_id=r["id"], path=r["path"],
+                                  capture_dt=r["capture_dt"] or "", group=day, composite=0.0))
+    return Memory(title=title, subtitle=subtitle, selection=selection, captions=captions)
