@@ -84,8 +84,10 @@ python -m photomemory.cli web            # -> http://127.0.0.1:8000
 - **Browse** months / years / trips (with place & event highlights).
 - Click one to **preview** the auto-selection: a thumbnail grid with family-member badges
   and quality scores. Click any photo to include/exclude it, set the length, then **Render**.
-- **Videos** tab plays and downloads finished memories; **People** tab shows enrolled
-  people and the face-review montages.
+- **Videos** tab plays and downloads finished memories.
+- **People** tab is a full enrollment workspace: run face extract/cluster, **label clusters**
+  by name, **split** over-merged ones, **enroll from reference photos** (with a verification
+  montage), and set each person's **birthdate / lifespan** — all in-browser.
 
 Long operations (scoring a selection, rendering) run as background jobs the page polls.
 Backend is FastAPI (`photomemory/web.py`); the single-page frontend is `photomemory/static/index.html`.

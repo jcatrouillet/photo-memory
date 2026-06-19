@@ -75,7 +75,13 @@ def stats():
         years = [{"year": int(r["y"]), "count": r["n"]} for r in c.execute(
             "SELECT substr(capture_dt,1,4) y, COUNT(*) n FROM media "
             "WHERE capture_dt IS NOT NULL GROUP BY y ORDER BY y DESC")]
-    people = [{"name": n, "faces": f} for n, f in faceindex.list_people()]
+    with db.connect() as c:
+        bd = {r["name"]: (r["birthdate"], r["active_until"]) for r in c.execute(
+            "SELECT name, birthdate, active_until FROM person_birth")}
+    people = [{"name": n, "faces": f,
+               "birthdate": bd.get(n, (None, None))[0],
+               "until": bd.get(n, (None, None))[1]}
+              for n, f in faceindex.list_people()]
     return {"total": total, "gps": gps,
             "range": [rng["a"][:10] if rng["a"] else None, rng["b"][:10] if rng["b"] else None],
             "years": years, "people": people}
@@ -137,6 +143,115 @@ def montage(name: str):
     if not p.exists():
         raise HTTPException(404)
     return FileResponse(p, media_type="image/jpeg")
+
+
+# --- face enrollment / labeling ------------------------------------------------
+
+class LabelReq(BaseModel):
+    cluster: int
+    name: str
+
+
+class EnrollReq(BaseModel):
+    name: str
+    paths: list[str]
+    add: bool = True
+
+
+class BirthdayReq(BaseModel):
+    name: str
+    date: str
+
+
+class LifespanReq(BaseModel):
+    name: str
+    active_from: str | None = None
+    until: str | None = None
+
+
+class ExtractReq(BaseModel):
+    sample: int = 4000
+
+
+class ClusterReq(BaseModel):
+    eps: float = 0.30
+    min_samples: int = 4
+
+
+class SplitReq(BaseModel):
+    cluster: int
+    eps: float = 0.24
+    min_samples: int = 4
+
+
+import re as _re
+
+
+@app.get("/api/faces/clusters")
+def face_clusters():
+    """Cluster montages with parsed id + size, biggest first (for the labeling grid)."""
+    d = get_config().output_dir / "people_review"
+    items = []
+    if d.exists():
+        for p in d.glob("cluster_*.jpg"):
+            m = _re.match(r"cluster_(\d+)_n(\d+)", p.stem)
+            if m:
+                items.append({"cluster": int(m.group(1)), "size": int(m.group(2)), "file": p.name})
+    items.sort(key=lambda x: x["size"], reverse=True)
+    return items
+
+
+@app.post("/api/faces/label")
+def face_label(req: LabelReq):
+    n = faceindex.label_cluster(req.cluster, req.name.strip())
+    return {"labeled": n, "name": req.name.strip()}
+
+
+@app.post("/api/faces/birthday")
+def face_birthday(req: BirthdayReq):
+    faceindex.set_birthdate(req.name, req.date)
+    return {"ok": True}
+
+
+@app.post("/api/faces/lifespan")
+def face_lifespan(req: LifespanReq):
+    faceindex.set_active_range(req.name, req.active_from, req.until)
+    return {"ok": True}
+
+
+@app.post("/api/faces/enroll")
+def face_enroll(req: EnrollReq):
+    def fn():
+        n = faceindex.enroll_photos(req.name.strip(), req.paths, add=req.add)
+        return {"name": req.name.strip(), "added": n,
+                "montage": f"enrolled_{req.name.strip()}.jpg" if n else None}
+    return {"job": _submit(fn)}
+
+
+@app.post("/api/faces/extract")
+def face_extract(req: ExtractReq):
+    def fn():
+        ids = faceindex.sample_media(req.sample)
+        return {"processed": faceindex.extract(ids, progress=False)}
+    return {"job": _submit(fn)}
+
+
+@app.post("/api/faces/cluster")
+def face_cluster(req: ClusterReq):
+    def fn():
+        sizes = faceindex.cluster(eps=req.eps, min_samples=req.min_samples)
+        faceindex.save_montages()
+        return {"clusters": len(sizes)}
+    return {"job": _submit(fn)}
+
+
+@app.post("/api/faces/split")
+def face_split(req: SplitReq):
+    def fn():
+        sizes = faceindex.split_cluster(req.cluster, eps=req.eps, min_samples=req.min_samples)
+        faceindex.save_montages()
+        return {"subclusters": len(sizes)}
+    return {"job": _submit(fn)}
 
 
 # --- preview & render ----------------------------------------------------------

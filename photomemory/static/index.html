@@ -196,15 +196,86 @@ async function loadVideos(){const el=$('#videos');const vs=await api('/api/video
     <a class="btn ghost" href="/media/${encodeURIComponent(v.name)}" download>Download</a></div>
     <video controls preload="metadata" src="/media/${encodeURIComponent(v.name)}"></video></div>`).join('');}
 
-async function loadPeople(){const el=$('#people');const s=await api('/api/stats');
-  const chips=s.people.map(p=>`<span class="chip">${esc(p.name)} · ${p.faces}</span>`).join('')
-    ||'<span class="muted">none enrolled</span>';
-  const ms=await api('/api/montages');
-  el.innerHTML=`<h2>Enrolled people</h2><div class="chips">${chips}</div>
-    <h2 style="margin-top:22px">Face review montages</h2>
-    <p class="muted">From <code>faces cluster</code> / <code>faces enroll</code>. Labeling stays in the CLI for now.</p>
-    <div class="pgrid">${ms.map(n=>`<figure><img loading="lazy" src="/api/montage/${encodeURIComponent(n)}">
-      <figcaption>${esc(n)}</figcaption></figure>`).join('')||'<span class="muted">no montages</span>'}</div>`;}
+function postJSON(p,b){return fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify(b)}).then(r=>r.json());}
+async function jobToast(job,label){toast(`<span class="spin"></span> ${label}…`,0);
+  try{const r=await poll(job);toast('✅ '+label+' done');return r;}
+  catch(e){toast('❌ '+esc(e.message),5000);throw e;}}
+
+async function loadPeople(){
+  const el=$('#people'); const s=await api('/api/stats');
+  const rows=s.people.map(p=>`<tr>
+      <td><b>${esc(p.name)}</b> <span class="muted">· ${p.faces} faces</span></td>
+      <td>birthday <input type="date" value="${p.birthdate||''}" id="bd_${esc(p.name)}" style="width:150px"></td>
+      <td>until <input type="date" value="${p.until||''}" id="lf_${esc(p.name)}" style="width:150px"></td>
+      <td><button class="btn ghost" onclick="savePerson('${esc(p.name)}')">Save dates</button></td>
+    </tr>`).join('')||'<tr><td class="muted">none enrolled yet</td></tr>';
+
+  const ms=await api('/api/faces/clusters');
+  const tiles=ms.map(c=>`<figure>
+      <img loading="lazy" src="/api/montage/${encodeURIComponent(c.file)}?t=${Date.now()}">
+      <figcaption>cluster #${c.cluster} · ${c.size} faces</figcaption>
+      <div class="row" style="margin:6px 0 0">
+        <input placeholder="name…" id="cl_${c.cluster}" style="flex:1;min-width:80px">
+        <button class="btn" onclick="labelCluster(${c.cluster})">Label</button>
+        <button class="btn ghost" onclick="splitCluster(${c.cluster})">Split</button>
+      </div></figure>`).join('')||'<span class="muted">no clusters — run Extract then Cluster below</span>';
+
+  el.innerHTML=`
+    <h2>Enrolled people</h2>
+    <table style="border-collapse:collapse;width:100%"><tbody>${rows}</tbody></table>
+
+    <h2 style="margin-top:24px">Enroll from reference photos</h2>
+    <p class="muted">Best for people clustering can't separate. Paste folder(s) or file path(s), one per line.
+      Picks the dominant recurring face; shows a montage to verify.</p>
+    <div class="row">
+      <input id="en_name" placeholder="person name" style="width:160px">
+      <label class="muted"><input type="checkbox" id="en_add" checked> add to existing</label>
+      <button class="btn" onclick="enrollPhotos()">Enroll</button>
+    </div>
+    <textarea id="en_paths" rows="3" placeholder="Z:\\Triees\\2022\\20221001 Portrait Julien&#10;Z:\\...\\IMG_4197.JPG"
+      style="width:100%;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
+    <div id="en_result"></div>
+
+    <h2 style="margin-top:24px">Build / refine face index</h2>
+    <div class="row">
+      <label class="muted">sample <input type="number" id="ex_n" value="4000" style="width:90px"></label>
+      <button class="btn ghost" onclick="runExtract()">Extract faces</button>
+      <span style="width:14px"></span>
+      <label class="muted">eps <input type="number" id="cl_eps" value="0.30" step="0.02" style="width:80px"></label>
+      <button class="btn ghost" onclick="runCluster()">Cluster</button>
+    </div>
+
+    <h2 style="margin-top:24px">Clusters to label</h2>
+    <div class="pgrid">${tiles}</div>`;
+}
+async function savePerson(name){
+  const bd=$('#bd_'+CSS.escape(name)).value, lf=$('#lf_'+CSS.escape(name)).value;
+  if(bd)await postJSON('/api/faces/birthday',{name,date:bd});
+  if(lf)await postJSON('/api/faces/lifespan',{name,until:lf});
+  toast('✅ Saved dates for '+esc(name));}
+async function labelCluster(cl){const name=$('#cl_'+cl).value.trim();
+  if(!name){toast('Enter a name');return;}
+  const r=await postJSON('/api/faces/label',{cluster:cl,name});
+  toast(`✅ Labeled ${r.labeled} faces as ${esc(name)}`);loadPeople();}
+async function splitCluster(cl){const {job}=await postJSON('/api/faces/split',{cluster:cl});
+  await jobToast(job,`Splitting cluster #${cl}`);loadPeople();}
+async function enrollPhotos(){
+  const name=$('#en_name').value.trim();
+  const paths=$('#en_paths').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!name||!paths.length){toast('Enter a name and at least one path');return;}
+  const {job}=await postJSON('/api/faces/enroll',{name,paths,add:$('#en_add').checked});
+  try{const r=await jobToast(job,`Enrolling ${name}`);
+    $('#en_result').innerHTML=r.added?`<p>Added ${r.added} faces. Verify:</p>
+      <img src="/api/montage/${encodeURIComponent(r.montage)}?t=${Date.now()}" style="max-width:480px;border-radius:8px">`
+      :'<p style="color:var(--danger)">No faces found in those photos.</p>';
+    loadStats();}catch(e){}}
+async function runExtract(){const n=+$('#ex_n').value||4000;
+  const {job}=await postJSON('/api/faces/extract',{sample:n});
+  await jobToast(job,`Extracting faces from ${n} photos`);}
+async function runCluster(){const eps=+$('#cl_eps').value||0.30;
+  const {job}=await postJSON('/api/faces/cluster',{eps});
+  await jobToast(job,'Clustering faces');loadPeople();}
 
 loadStats();
 </script>
