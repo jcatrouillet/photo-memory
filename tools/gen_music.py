@@ -1,8 +1,8 @@
 """Generate royalty-free background tracks (synthesized from scratch).
 
-Produces upbeat, energetic beds (pad chords + arpeggio + a kick/hat groove) under
-assets/music/. The earlier slow "calm/reflective" tracks are replaced with faster,
-more energetic ones. Run:  python tools/gen_music.py
+Energetic beds with actual song structure (intro -> verse -> chorus w/ lead melody ->
+variation -> outro), drum fills and a snare backbeat, so they evolve instead of looping
+the same bars. Output under assets/music/. Run:  python tools/gen_music.py
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ NOTES = {"C": -9, "C#": -8, "D": -7, "D#": -6, "E": -5, "F": -4, "F#": -3,
          "G": -2, "G#": -1, "A": 0, "A#": 1, "B": 2}
 
 
-def freq(name: str, octave: int) -> float:
+def freq(name, octave):
     return A4 * (2 ** ((NOTES[name] + (octave - 4) * 12) / 12))
 
 
@@ -36,15 +36,16 @@ def adsr(n, a=0.02, d=0.1, s=0.7, r=0.2):
     return env
 
 
+# --- instruments ---------------------------------------------------------------
+
 def pad(f, dur, gain=0.2):
     n = int(dur * SR); t = np.arange(n) / SR
-    sig = np.zeros(n)
-    for mult, g, det in [(1, 1.0, 0.0), (1, 0.6, 0.3), (2, 0.3, 0.0), (3, 0.14, 0.0)]:
-        sig += g * np.sin(2 * np.pi * (f * mult + det) * t)
+    sig = sum(g * np.sin(2 * np.pi * (f * m + det) * t)
+              for m, g, det in [(1, 1.0, 0), (1, 0.6, 0.3), (2, 0.3, 0), (3, 0.14, 0)])
     return sig * adsr(n, a=0.05, d=0.3, s=0.85, r=0.25) * gain
 
 
-def chord(names_oct, dur, gain=0.18):
+def chord(names_oct, dur, gain=0.15):
     n = int(dur * SR); out = np.zeros(n)
     for name, octv in names_oct:
         out += pad(freq(name, octv), dur, gain / len(names_oct))
@@ -57,14 +58,25 @@ def pluck(f, dur, gain=0.16):
     return sig * np.exp(-5.0 * t) * gain
 
 
+def lead(f, dur, gain=0.24):
+    n = int(dur * SR); t = np.arange(n) / SR
+    vib = 1 + 0.006 * np.sin(2 * np.pi * 5.5 * t)
+    sig = np.sin(2 * np.pi * f * t * vib) + 0.3 * np.sin(2 * np.pi * 2 * f * t * vib)
+    return sig * adsr(n, a=0.02, d=0.12, s=0.8, r=0.12) * gain
+
+
 def kick(beat, gain=0.95):
     dur = min(beat * 0.9, 0.35); n = int(dur * SR); t = np.arange(n) / SR
-    f = 110 * np.exp(-t * 32) + 47           # punchy pitch drop
-    sig = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 9)
-    return sig * gain
+    f = 110 * np.exp(-t * 32) + 47
+    return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 9) * gain
 
 
-def hat(gain=0.22):
+def snare(gain=0.5):
+    dur = 0.13; n = int(dur * SR); t = np.arange(n) / SR
+    return (np.random.randn(n) + 0.5 * np.sin(2 * np.pi * 190 * t)) * np.exp(-t * 28) * gain
+
+
+def hat(gain=0.2):
     dur = 0.045; n = int(dur * SR); t = np.arange(n) / SR
     return np.random.randn(n) * np.exp(-t * 90) * gain
 
@@ -84,73 +96,116 @@ def normalize(x, peak=0.9):
 def write_wav(path, mono):
     mono = normalize(mono)
     stereo = np.stack([mono, np.roll(mono, 150)], axis=1)
-    data = (stereo * 32767).astype(np.int16)
     with wave.open(str(path), "w") as w:
         w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
-        w.writeframes(data.tobytes())
+        w.writeframes((stereo * 32767).astype(np.int16).tobytes())
     print(f"wrote {path.name}  ({len(mono) / SR:.0f}s)")
 
 
-def build_energetic(progression, arp_notes, bpm=124, bars=32, octave=4, swing_hat=True):
-    """Driving track: sustained pad chords + eighth-note arpeggio + kick/hat groove."""
-    beat = 60 / bpm
-    total_beats = bars * 4
-    length = total_beats * beat
-    n = int(length * SR)
-    bed = np.zeros(n); arp = np.zeros(n); perc = np.zeros(n)
+# --- arrangement ---------------------------------------------------------------
 
-    # One chord per bar, in a lower octave.
+def _section(prog, bars, beat, arp=None, octave=4, drums=True, fill=False, lead_phrase=None):
+    """Render one section's layers (bed, arp, perc, lead) as same-length arrays."""
+    length = bars * 4 * beat; n = int(length * SR)
+    bed = np.zeros(n); arpb = np.zeros(n); perc = np.zeros(n); leadb = np.zeros(n)
+
     for bar in range(bars):
-        ch = progression[bar % len(progression)]
         s = int(bar * 4 * beat * SR)
-        c = chord([(nm, octave - 1) for nm in ch], 4 * beat, gain=0.16)
+        c = chord([(nm, octave - 1) for nm in prog[bar % len(prog)]], 4 * beat)
         e = min(s + len(c), n); bed[s:e] += c[:e - s]
 
-    # Arpeggio on eighth notes.
-    step = beat / 2; pos = 0.0; i = 0
-    while pos < length - step:
-        nm, o = arp_notes[i % len(arp_notes)]
-        p = pluck(freq(nm, o), step * 1.3)
-        s = int(pos * SR); e = min(s + len(p), n); arp[s:e] += p[:e - s]
-        pos += step; i += 1
+    if arp:
+        step = beat / 2; pos = 0.0; i = 0
+        while pos < length - 1e-6:
+            nm, o = arp[i % len(arp)]
+            p = pluck(freq(nm, o), step * 1.3)
+            s = int(pos * SR); e = min(s + len(p), n); arpb[s:e] += p[:e - s]
+            pos += step; i += 1
 
-    # Kick on every beat; hat on the off-beats.
-    k = kick(beat)
-    for b in range(total_beats):
-        s = int(b * beat * SR); e = min(s + len(k), n); perc[s:e] += k[:e - s]
-    h = hat(); pos = beat / 2
-    while pos < length:
-        s = int(pos * SR); e = min(s + len(h), n); perc[s:e] += h[:e - s]
-        pos += beat
+    if drums:
+        total = bars * 4; k = kick(beat); sn = snare(); h = hat()
+        for b in range(total):
+            if fill and b >= total - 2:        # last half-bar -> snare fill
+                continue
+            s = int(b * beat * SR)
+            e = min(s + len(k), n); perc[s:e] += k[:e - s]
+            if b % 4 in (1, 3):                 # backbeat on 2 & 4
+                e = min(s + len(sn), n); perc[s:e] += sn[:e - s]
+        pos = beat / 2                          # offbeat hats
+        while pos < length:
+            s = int(pos * SR); e = min(s + len(h), n); perc[s:e] += h[:e - s]; pos += beat
+        if fill:                                # 16th snare roll into next section
+            pos = (total - 2) * beat
+            while pos < length:
+                sr = snare(0.4); s = int(pos * SR); e = min(s + len(sr), n)
+                perc[s:e] += sr[:e - s]; pos += beat / 4
 
-    return soft_reverb(bed + 0.85 * arp) + 0.8 * perc   # keep drums dry & punchy
+    if lead_phrase:
+        pos = 0.0; i = 0
+        while pos < length - 1e-6:
+            nm, o, bts = lead_phrase[i % len(lead_phrase)]
+            dur = bts * beat
+            l = lead(freq(nm, o), dur * 0.92)
+            s = int(pos * SR); e = min(s + len(l), n); leadb[s:e] += l[:e - s]
+            pos += dur; i += 1
+
+    return bed, arpb, perc, leadb
+
+
+def build_song(prog_a, prog_b, arp_a, arp_b, lead_b, bpm=126, key_oct=4):
+    """intro -> verse -> chorus(lead) -> verse(var) -> chorus(lead, var) -> outro."""
+    beat = 60 / bpm
+    arrangement = [
+        (prog_a[:1], 2, dict(arp=None, drums=False)),                                  # intro pads
+        (prog_a, 8, dict(arp=arp_a, drums=True, fill=True)),                           # verse 1
+        (prog_b, 8, dict(arp=arp_b, drums=True, lead_phrase=lead_b, fill=True)),       # chorus 1
+        (prog_a, 8, dict(arp=[(n, o + 1) for n, o in arp_a], drums=True, fill=True)),  # verse 2 (8va arp)
+        (prog_b, 8, dict(arp=arp_b, drums=True,
+                         lead_phrase=[(n, o, b) for n, o, b in lead_b])),              # chorus 2
+        (prog_a[:1], 2, dict(arp=None, drums=False)),                                  # outro pads
+    ]
+    layers = [[], [], [], []]
+    for prog, bars, opts in arrangement:
+        for i, arr in enumerate(_section(prog, bars, beat, octave=key_oct, **opts)):
+            layers[i].append(arr)
+    bed, arp, perc, ld = (np.concatenate(L) for L in layers)
+    return soft_reverb(bed + 0.8 * arp + 0.85 * ld) + 0.85 * perc
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    # Remove the old slow tracks if present.
     for old in ("calm.wav", "reflective.wav"):
         p = OUT / old
         if p.exists():
-            p.unlink(); print(f"removed {old} (too slow)")
+            p.unlink(); print(f"removed {old}")
 
-    # Energetic, bright — I–V–vi–IV in C, fast arpeggio.
-    write_wav(OUT / "energetic.wav", build_energetic(
-        progression=[["C", "E", "G"], ["G", "B", "D"], ["A", "C", "E"], ["F", "A", "C"]],
-        arp_notes=[("C", 5), ("E", 5), ("G", 5), ("C", 6), ("G", 5), ("E", 5)],
-        bpm=126, bars=32))
+    C = {"C": ["C", "E", "G"], "G": ["G", "B", "D"], "Am": ["A", "C", "E"], "F": ["F", "A", "C"]}
+    write_wav(OUT / "energetic.wav", build_song(
+        prog_a=[C["C"], C["G"], C["Am"], C["F"]],
+        prog_b=[C["F"], C["C"], C["G"], C["Am"]],
+        arp_a=[("C", 5), ("E", 5), ("G", 5), ("E", 5)],
+        arp_b=[("C", 5), ("G", 5), ("C", 6), ("G", 5)],
+        lead_b=[("E", 5, 1), ("G", 5, 1), ("A", 5, 1), ("G", 5, 1),
+                ("C", 6, 2), ("B", 5, 1), ("G", 5, 1)],
+        bpm=126))
 
-    # Upbeat, driving — vi–IV–I–V, slightly faster.
-    write_wav(OUT / "upbeat.wav", build_energetic(
-        progression=[["A", "C", "E"], ["F", "A", "C"], ["C", "E", "G"], ["G", "B", "D"]],
-        arp_notes=[("A", 5), ("C", 6), ("E", 5), ("G", 5)],
-        bpm=132, bars=34))
+    Am = {"Am": ["A", "C", "E"], "F": ["F", "A", "C"], "C": ["C", "E", "G"], "G": ["G", "B", "D"]}
+    write_wav(OUT / "upbeat.wav", build_song(
+        prog_a=[Am["Am"], Am["F"], Am["C"], Am["G"]],
+        prog_b=[Am["C"], Am["G"], Am["Am"], Am["F"]],
+        arp_a=[("A", 5), ("C", 6), ("E", 6), ("C", 6)],
+        arp_b=[("A", 5), ("E", 6), ("A", 6), ("E", 6)],
+        lead_b=[("A", 5, 1), ("C", 6, 1), ("E", 6, 2), ("D", 6, 1), ("C", 6, 1), ("A", 5, 2)],
+        bpm=132))
 
-    # Uplifting — mid-up tempo with a lighter groove.
-    write_wav(OUT / "uplifting.wav", build_energetic(
-        progression=[["D", "F#", "A"], ["A", "C#", "E"], ["B", "D", "F#"], ["G", "B", "D"]],
-        arp_notes=[("D", 5), ("F#", 5), ("A", 5), ("F#", 5)],
-        bpm=118, bars=30))
+    D = {"D": ["D", "F#", "A"], "A": ["A", "C#", "E"], "Bm": ["B", "D", "F#"], "G": ["G", "B", "D"]}
+    write_wav(OUT / "uplifting.wav", build_song(
+        prog_a=[D["D"], D["A"], D["Bm"], D["G"]],
+        prog_b=[D["G"], D["D"], D["A"], D["Bm"]],
+        arp_a=[("D", 5), ("F#", 5), ("A", 5), ("F#", 5)],
+        arp_b=[("D", 5), ("A", 5), ("D", 6), ("A", 5)],
+        lead_b=[("F#", 5, 1), ("A", 5, 1), ("B", 5, 2), ("A", 5, 1), ("F#", 5, 1), ("D", 5, 2)],
+        bpm=118))
 
 
 if __name__ == "__main__":

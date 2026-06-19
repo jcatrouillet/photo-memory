@@ -15,7 +15,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 - **Music**: replaced the slow calm/reflective beds with energetic tracks (118–132 BPM,
-  kick + hi-hat groove + arpeggio) in `tools/gen_music.py`.
+  kick + hi-hat groove). Now arranged with song structure (intro/verse/chorus + lead melody/fills) so they no longer loop the same bars.
 - **Even selection**: when there are more day-groups than slots, sample groups evenly
   across the timeline instead of front-loading the earliest days.
 - **Tighter de-duplication** (pHash threshold 8 → 12) so near-identical shots aren't both picked.
