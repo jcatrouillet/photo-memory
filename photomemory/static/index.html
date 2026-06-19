@@ -93,6 +93,7 @@
       <h2 id="ptitle" style="margin:0"></h2>
       <span class="spacer"></span>
       <span class="muted" id="pcount"></span>
+      <button class="btn ghost" id="fillBtn">Fill</button>
       <button class="btn ghost" id="addBtn">+ Add photos</button>
       <label class="muted"><input type="checkbox" id="music" checked> music</label>
       <button class="btn" id="renderBtn">Render selected</button>
@@ -161,6 +162,7 @@ async function doPreview(type,key,year){
       body:JSON.stringify({type,key,year:year??null,length:len})});
     const r=await poll(job); curPreview={...r,type,key,year};
     $('#ptitle').textContent=r.title;$('#psub').textContent=r.subtitle||'';
+    $('#fillBtn').textContent='Fill to '+r.target;
     $('#pgrid').innerHTML=r.items.map(it=>tile(it,true)).join('');
     bindTiles(); updateCount();
   }catch(e){$('#pgrid').innerHTML=`<div style="color:var(--danger)">Error: ${esc(e.message)}</div>`;}
@@ -192,6 +194,24 @@ $('#addBtn').onclick=async()=>{
     toast(`Added ${add.length} more photos — click to include them`);
   }catch(e){toast('❌ '+esc(e.message),4000);}
   finally{btn.textContent=old;btn.disabled=false;}
+};
+
+$('#fillBtn').onclick=()=>{
+  if(!curPreview)return;
+  const target=curPreview.target;
+  const onSet=new Set([...$('#pgrid').querySelectorAll('.tile.on')].map(t=>+t.dataset.id));
+  if(onSet.size>=target){toast('Already at '+target+' photos');return;}
+  const tiles=new Map([...$('#pgrid').querySelectorAll('.tile')].map(t=>[+t.dataset.id,t]));
+  for(const it of (curPreview.extras||[])){
+    if(onSet.size>=target)break;
+    if(onSet.has(it.media_id))continue;
+    const t=tiles.get(it.media_id);
+    if(t)t.classList.add('on');
+    else $('#pgrid').insertAdjacentHTML('beforeend',tile(it,true));
+    onSet.add(it.media_id);
+  }
+  bindTiles();updateCount();
+  toast(onSet.size<target?`Filled to ${onSet.size} (no more next-best left)`:`Filled back to ${target}`);
 };
 
 $('#renderBtn').onclick=async()=>{

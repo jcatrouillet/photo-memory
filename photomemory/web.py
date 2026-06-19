@@ -270,11 +270,11 @@ class RenderReq(BaseModel):
     music: bool = True
 
 
-def _items(mem: Memory):
+def _items(selection, captions):
     return [{"media_id": s.media_id, "date": (s.capture_dt or "")[:10],
-             "group": s.group, "caption": mem.captions.get(s.group, ""),
+             "group": s.group, "caption": captions.get(s.group, ""),
              "people": list(s.people), "score": round(s.composite, 3)}
-            for s in mem.selection]
+            for s in selection]
 
 
 @app.post("/api/preview")
@@ -298,7 +298,9 @@ def preview(req: PreviewReq):
         with _lock:
             _previews[pid] = mem
         return {"preview_id": pid, "title": mem.title, "subtitle": mem.subtitle,
-                "items": _items(mem)}
+                "target": len(mem.selection),
+                "items": _items(mem.selection, mem.captions),
+                "extras": _items(mem.extras, mem.captions)}
 
     return {"job": _submit(fn)}
 

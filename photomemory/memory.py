@@ -23,6 +23,7 @@ class Memory:
     subtitle: str
     selection: list[Selected]
     captions: dict[str, str] = field(default_factory=dict)  # group -> friendly label
+    extras: list[Selected] = field(default_factory=list)    # next-best, ranked (for "fill")
 
     def __len__(self) -> int:
         return len(self.selection)
@@ -65,8 +66,8 @@ def _sample_capped(media_to_group: dict[int, str], cap: int) -> list[int]:
 
 
 def _assemble(media_to_group: dict[int, str], target: int,
-              score_cap: int | None = None) -> list[Selected]:
-    """Score (if needed), dedupe, then distribute the given media into a selection."""
+              score_cap: int | None = None) -> tuple[list[Selected], list[Selected]]:
+    """Score (if needed), dedupe, distribute. Returns (selection, ranked next-best extras)."""
     from .quality.score import ensure_scored
 
     ids = list(media_to_group.keys())
@@ -97,7 +98,11 @@ def _assemble(media_to_group: dict[int, str], target: int,
             rank=c.composite + w_family * fam_score,
             people=tuple(people),
         ))
-    return distribute(pool, target)
+    selection = distribute(pool, target)
+    chosen = {s.media_id for s in selection}
+    extras = sorted((p for p in pool if p.media_id not in chosen),
+                    key=lambda s: s.rank, reverse=True)[: max(target * 4, 60)]
+    return selection, extras
 
 
 def _family_for(media_ids: list[int]) -> dict[int, tuple[float, list[str]]]:
@@ -113,7 +118,7 @@ def _family_for(media_ids: list[int]) -> dict[int, tuple[float, list[str]]]:
 def build_month(year: int, month: int, target: int) -> Memory:
     events = month_events(year, month)
     media_to_group = {mid: e.date_start for e in events for mid in e.media_ids}
-    selection = _assemble(media_to_group, target, score_cap=max(target * 15, 300))
+    selection, extras = _assemble(media_to_group, target, score_cap=max(target * 15, 300))
     top = [e.label for e in sorted(events, key=lambda e: e.count, reverse=True)[:3]]
     captions = {e.date_start: e.label for e in events}
     return Memory(
@@ -121,6 +126,7 @@ def build_month(year: int, month: int, target: int) -> Memory:
         subtitle=", ".join(top),
         selection=selection,
         captions=captions,
+        extras=extras,
     )
 
 
@@ -137,12 +143,13 @@ def build_year(year: int, target: int) -> Memory:
         captions[f"{year}-{m:02d}"] = f"{MONTH_NAMES[m]}" + (f" - {top.label}" if top else "")
         if top:
             highlights.append(top.label)
-    selection = _assemble(media_to_group, target, score_cap=max(target * 20, 800))
+    selection, extras = _assemble(media_to_group, target, score_cap=max(target * 20, 800))
     return Memory(
         title=f"{year}",
         subtitle="A Year in Review",
         selection=selection,
         captions=captions,
+        extras=extras,
     )
 
 
@@ -154,13 +161,14 @@ def build_trip(trip: Trip, target: int) -> Memory:
             trip.media_ids,
         ).fetchall()
     media_to_group = {r["id"]: (r["capture_dt"] or "")[:10] for r in rows}
-    selection = _assemble(media_to_group, target, score_cap=max(target * 15, 400))
+    selection, extras = _assemble(media_to_group, target, score_cap=max(target * 15, 400))
     captions = {(r["capture_dt"] or "")[:10]: trip.label for r in rows}
     return Memory(
         title=trip.label,
         subtitle=f"{trip.date_start} - {trip.date_end}",
         selection=selection,
         captions=captions,
+        extras=extras,
     )
 
 
